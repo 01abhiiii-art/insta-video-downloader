@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="{{ heading }}">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="site-header">
+        <a class="logo" href="/" aria-label="Insta Video Downloader home"><span class="logo-mark">◇</span><span>Insta<span>Video</span></span></a>
+        <nav class="header-nav" aria-label="Primary navigation"><a href="/">Home</a><a href="/faq">FAQ</a></nav>
+    </header>
+    <main class="info-page">
+        <p class="legal-kicker">MEDIA SAVE · LEGAL</p>
+        <h1>{{ heading }}</h1>
+        {% if updated %}<p class="updated">Last updated: {{ updated }}</p>{% endif %}
+        {% if faqs %}
+            {% for question, answer in faqs %}
+            <details><summary>{{ question }}</summary><p>{{ answer }}</p></details>
+            {% endfor %}
+        {% elif sections %}
+            {% for section_heading, paragraphs in sections %}
+            <section class="policy-section">
+                <h2>{{ section_heading }}</h2>
+                {% for paragraph in paragraphs %}<p>{{ paragraph }}</p>{% endfor %}
+            </section>
+            {% endfor %}
+        {% else %}<p>{{ content }}</p>{% endif %}
+        <a class="download-btn info-button" href="/">Open downloader</a>
+    </main>
+    <footer>
+        <p><a href="/about">About</a> · <a href="/privacy">Privacy</a> · <a href="/cookies">Cookies</a> · <a href="/terms">Terms</a> · <a href="/copyright">Copyright</a> · <a href="/contact">Contact</a></p>
+        <p>© 2026 Insta Video Downloader. All rights reserved.</p>
+    </footer>
+</body>
+</html>

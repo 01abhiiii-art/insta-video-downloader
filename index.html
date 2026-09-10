@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="{{ page.description }}">
+    <title>{{ page.label }} | Media Saver</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="site-header">
+        <a class="logo" href="/" aria-label="Insta Video Downloader home"><span class="logo-mark">◇</span><span>Insta<span>Video</span></span></a>
+        <nav class="header-nav" aria-label="Primary navigation">
+            <a href="/faq">FAQ</a><button id="theme-toggle" type="button" aria-label="Toggle theme">☾</button><span>EN⌄</span>
+        </nav>
+    </header>
+    <main>
+        <section class="hero">
+            <div class="hero-inner">
+                <nav class="tool-tabs" aria-label="Download tools">
+                    {% for key, item in page_config.items() %}<a class="{% if key == page_key %}active{% endif %}" href="{{ item.path }}" title="{{ item.label }}">{{ item.icon }}</a>{% endfor %}
+                </nav>
+                <p class="platform">{{ page.icon }} Public media tool</p>
+                <h1>{{ page.label }}</h1>
+                <p class="hero-copy">{{ page.description }}</p>
+                <form id="input-section" class="url-form" novalidate>
+                    <label class="sr-only" for="video-url">Media URL</label>
+                    <input id="video-url" type="url" placeholder="{{ page.placeholder }}" autocomplete="url" required>
+                    <button id="paste-btn" class="paste-btn" type="button">▣&nbsp; Paste</button>
+                    <button id="download-btn" class="download-btn" type="submit">Find media</button>
+                </form>
+                        <p class="hint">Use only public content you have permission to save.</p>
+            </div>
+        </section>
+        <section class="content-section" id="result-section">
+            <div id="error-message" class="alert hidden" role="alert"></div>
+            <div id="loading" class="loading hidden" aria-live="polite"><span class="spinner"></span> Fetching media details...</div>
+            <div id="result-content" class="result hidden">
+                <button id="back-btn" class="back-btn" type="button">← Search another link</button>
+                <img id="thumbnail" class="thumbnail" alt="" hidden>
+                <h2 id="video-title"></h2>
+                <p class="format-heading">Available downloads</p>
+                <div id="formats-container" class="formats"></div>
+            </div>
+        </section>
+        <section class="discover"><h2>Explore more tools</h2><div class="discover-grid">{% for key, item in page_config.items() %}<a href="{{ item.path }}" class="discover-card"><span>{{ item.icon }}</span><strong>{{ item.label }}</strong><small>{{ item.description }}</small></a>{% endfor %}</div></section>
+    </main>
+    <footer>
+        <a class="logo footer-logo" href="/"><span class="logo-mark">◇</span><span>Insta<span>Video</span></span></a>
+        <nav><a href="/">Video</a><a href="/photo">Photo</a><a href="/reels">Reels</a><a href="/story">Story</a><a href="/viewer">Viewer</a><a href="/igtv">IGTV</a><a href="/carousel">Carousel</a></nav>
+        <p><a href="/about">About</a> · <a href="/privacy">Privacy</a> · <a href="/cookies">Cookies</a> · <a href="/terms">Terms</a> · <a href="/copyright">Copyright</a> · <a href="/contact">Contact</a> · <a href="/faq">FAQ</a></p>
+        <p>© 2026 Insta Video Downloader. All rights reserved.</p>
+    </footer>
+    <script>window.PAGE_KEY = {{ page_key|tojson }};</script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
