@@ -103,6 +103,10 @@ def _extract_image_fallback(url: str) -> dict[str, Any] | None:
 LEGAL_EMAIL = "01.abhiiii@gmail.com"
 BUSINESS_NAME = "Insta Video Downloader"
 JURISDICTION = "India"
+SITE_URL = os.environ.get(
+    "SITE_URL",
+    "https://insta-video-downloader-ear1.onrender.com",
+).rstrip("/")
 
 
 PAGE_CONFIG = {
@@ -173,7 +177,6 @@ def downloader_page(page_key: str):
 
 @app.get("/sitemap.xml")
 def sitemap():
-    base_url = request.url_root.rstrip("/")
     routes = [
         "/",
         "/photo",
@@ -191,7 +194,7 @@ def sitemap():
         "/contact",
     ]
     entries = "\n".join(
-        f"  <url><loc>{base_url}{route}</loc></url>" for route in routes
+        f"  <url><loc>{SITE_URL}{route}</loc></url>" for route in routes
     )
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -199,13 +202,14 @@ def sitemap():
         f"{entries}\n"
         "</urlset>\n"
     )
-    return app.response_class(xml, mimetype="application/xml")
+    response = app.response_class(xml, mimetype="application/xml")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 
 
 @app.get("/robots.txt")
 def robots():
-    base_url = request.url_root.rstrip("/")
-    body = f"User-agent: *\nAllow: /\nSitemap: {base_url}/sitemap.xml\n"
+    body = f"User-agent: *\nAllow: /\nSitemap: {SITE_URL}/sitemap.xml\n"
     return app.response_class(body, mimetype="text/plain")
 
 
@@ -213,7 +217,7 @@ def robots():
 def faq():
     return render_template(
         "info.html",
-        title="FAQ | Media Saver",
+        title=f"FAQ | {BUSINESS_NAME}",
         heading="Frequently asked questions",
         faqs=[
             ("Is my link stored?", "No. Links are processed in real time and temporary files are removed after delivery."),
@@ -226,7 +230,12 @@ def faq():
 
 @app.get("/about")
 def about():
-    return render_template("info.html", title="About | Media Saver", heading="About Media Saver", content="Media Saver is an original utility for saving public media that you are allowed to use. It does not host or index downloaded content.")
+    return render_template(
+        "info.html",
+        title=f"About | {BUSINESS_NAME}",
+        heading=f"About {BUSINESS_NAME}",
+        content=f"{BUSINESS_NAME} is an original utility for saving public media that you are allowed to use. It does not host or index downloaded content.",
+    )
 
 
 @app.get("/privacy")
@@ -257,14 +266,14 @@ def terms():
         heading="Terms and conditions",
         updated="September 10, 2026",
         sections=[
-            ("1. Acceptance", ["By accessing MediaSave or using its downloader tools, you agree to these terms. If you do not agree, do not use the service."]),
+            ("1. Acceptance", [f"By accessing {BUSINESS_NAME} or using its downloader tools, you agree to these terms. If you do not agree, do not use the service."]),
             ("2. Permitted use", ["You may use the service only for public content that you own or are legally authorized to download. You must comply with copyright law, privacy law, the source platform's terms, and any applicable local regulations."]),
             ("3. Prohibited use", ["Do not use the service to infringe copyright, bypass access controls, download private or restricted content, harass people, distribute malware, automate abusive traffic, or interfere with the service."]),
-            ("4. Your responsibility", ["You are solely responsible for the URLs you submit, the content you download, and how you use it. MediaSave does not grant you ownership or a license to downloaded content."]),
+            ("4. Your responsibility", [f"You are solely responsible for the URLs you submit, the content you download, and how you use it. {BUSINESS_NAME} does not grant you ownership or a license to downloaded content."]),
             ("5. Service availability", ["The service is provided on an availability basis. Features may change, be limited, or be discontinued without notice. We do not guarantee that every URL or format will be supported."]),
-            ("6. Third-party services", ["Media extraction depends on third-party platforms and open-source tools. MediaSave does not control their availability, policies, content, or changes."]),
-            ("7. Intellectual property", ["MediaSave's original name, design, and software are owned by their respective operator. Third-party trademarks and media remain the property of their owners."]),
-            ("8. Disclaimer and limitation", ["To the maximum extent allowed by law, the service is provided without warranties. MediaSave is not liable for loss, interruption, unavailable content, or misuse of downloaded media. Nothing here limits rights that cannot legally be excluded."]),
+            ("6. Third-party services", [f"Media extraction depends on third-party platforms and open-source tools. {BUSINESS_NAME} does not control their availability, policies, content, or changes."]),
+            ("7. Intellectual property", [f"{BUSINESS_NAME}'s original name, design, and software are owned by their respective operator. Third-party trademarks and media remain the property of their owners."]),
+            ("8. Disclaimer and limitation", [f"To the maximum extent allowed by law, the service is provided without warranties. {BUSINESS_NAME} is not liable for loss, interruption, unavailable content, or misuse of downloaded media. Nothing here limits rights that cannot legally be excluded."]),
             ("9. Indemnity", ["You agree to defend and hold the operator harmless from claims arising from your unlawful use of the service or violation of these terms."]),
             ("10. Governing law and contact", [f"These terms are governed by the applicable laws of {JURISDICTION}, subject to mandatory consumer protections. These terms may be updated by publishing a revised version. Questions or legal notices should be sent to {LEGAL_EMAIL}."]),
         ],
@@ -309,7 +318,7 @@ def copyright_policy():
         heading="Copyright and takedown policy",
         updated="September 10, 2026",
         sections=[
-            ("1. No content hosting", ["MediaSave does not host a searchable library of downloaded media. Downloads are generated on demand and temporary files are removed after delivery."]),
+            ("1. No content hosting", [f"{BUSINESS_NAME} does not host a searchable library of downloaded media. Downloads are generated on demand and temporary files are removed after delivery."]),
             ("2. Rights holder notice", [f"If you believe a URL is being used through this service to infringe your rights, send a notice to {LEGAL_EMAIL} with your identity, the copyrighted work, the URL, your good-faith statement, and a statement that the information is accurate."]),
             ("3. Response", ["We may investigate valid notices, restrict abusive URLs, and take other reasonable action. We cannot remove content hosted by the original platform; contact that platform for removal from its servers."]),
         ],
