@@ -171,6 +171,44 @@ def downloader_page(page_key: str):
     return render_template("index.html", page=page, page_key=page_key, page_config=PAGE_CONFIG)
 
 
+@app.get("/sitemap.xml")
+def sitemap():
+    base_url = request.url_root.rstrip("/")
+    routes = [
+        "/",
+        "/photo",
+        "/reels",
+        "/story",
+        "/viewer",
+        "/igtv",
+        "/carousel",
+        "/faq",
+        "/about",
+        "/privacy",
+        "/cookies",
+        "/terms",
+        "/copyright",
+        "/contact",
+    ]
+    entries = "\n".join(
+        f"  <url><loc>{base_url}{route}</loc></url>" for route in routes
+    )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{entries}\n"
+        "</urlset>\n"
+    )
+    return app.response_class(xml, mimetype="application/xml")
+
+
+@app.get("/robots.txt")
+def robots():
+    base_url = request.url_root.rstrip("/")
+    body = f"User-agent: *\nAllow: /\nSitemap: {base_url}/sitemap.xml\n"
+    return app.response_class(body, mimetype="text/plain")
+
+
 @app.get("/faq")
 def faq():
     return render_template(
