@@ -310,7 +310,8 @@ def get_info():
     for video_format in info.get("formats", []):
         direct_url = video_format.get("url")
         format_id = video_format.get("format_id")
-        if not direct_url or not format_id:
+        video_codec = video_format.get("vcodec")
+        if not direct_url or not format_id or video_codec in {None, "none"}:
             continue
         formats.append(
             {
@@ -377,18 +378,28 @@ def download_video():
     temporary_dir = Path(tempfile.mkdtemp(prefix="download-", dir=DOWNLOAD_DIR))
     output_template = str(temporary_dir / "video.%(ext)s")
     options = {
-        "format": format_id.strip(),
+        "format": f"{format_id.strip()}+bestaudio/{format_id.strip()}/best",
         "outtmpl": output_template,
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
         "restrictfilenames": True,
+        "merge_output_format": "mp4",
     }
 
     try:
         with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(url, download=True)
-            downloaded_path = Path(ydl.prepare_filename(info))
+            prepared_path = Path(ydl.prepare_filename(info))
+        downloaded_files = [
+            path for path in temporary_dir.iterdir()
+            if path.is_file() and path.stat().st_size > 0
+        ]
+        downloaded_path = max(
+            downloaded_files,
+            key=lambda path: path.stat().st_size,
+            default=prepared_path,
+        )
         if not downloaded_path.is_file():
             shutil.rmtree(temporary_dir, ignore_errors=True)
             return _json_error("The downloaded file could not be found.", 500)
