@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="{{ heading }}">
     <title>{{ title }}</title>
+    <link rel="icon" href="{{ url_for('static', filename='clipfetch-logo.svg') }}" type="image/svg+xml">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <header class="site-header">
-        <a class="logo" href="/" aria-label="Insta Video Downloader home"><span class="logo-mark">◇</span><span>Insta<span>Video</span></span></a>
+        <a class="logo" href="/" aria-label="ClipFetch home"><img src="{{ url_for('static', filename='clipfetch-logo.svg') }}" alt="ClipFetch"></a>
         <nav class="header-nav" aria-label="Primary navigation"><a href="/">Home</a><a href="/faq">FAQ</a></nav>
     </header>
     <main class="info-page">
