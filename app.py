@@ -114,7 +114,7 @@ BUSINESS_NAME = "Insta Video Downloader"
 JURISDICTION = "India"
 SITE_URL = os.environ.get(
     "SITE_URL",
-    "https://insta-video-downloader-ear1.onrender.com",
+    "https://clipfetch.in",
 ).rstrip("/")
 ALLOWED_HOSTS = {"instagram.com", "www.instagram.com"}
 ALLOWED_MEDIA_HOST_SUFFIXES = (".cdninstagram.com", ".fbcdn.net", ".instagram.com")
@@ -423,6 +423,22 @@ def get_info():
                 "quality": _format_quality(video_format),
                 "url": direct_url,
             }
+        )
+
+    # Some Instagram photo/carousel URLs are accepted by yt-dlp but return no
+    # formats. Try the OG image path in that case instead of showing a dead
+    # "No downloadable formats" result.
+    if not formats:
+        try:
+            fallback = _extract_image_fallback(url)
+        except Exception:
+            fallback = None
+        if fallback:
+            return jsonify(fallback)
+        return _json_error(
+            "No downloadable video formats were found. The post may be private, "
+            "unavailable, or temporarily blocked by Instagram.",
+            422,
         )
 
     return jsonify(
