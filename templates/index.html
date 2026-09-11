@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta name="google-site-verification" content="B6zD8o-tx2jixOpjCrfh9jGtpByxNoK1sKC4Rx7OTCM">
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="{{ page.description }}">
+    <meta name="google-site-verification" content="B6zD8o-tx2jixOpjCrfh9jGtpByxNoK1sKC4Rx7OTCM">
     <title>{{ page.label }} | Media Saver</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -52,7 +52,6 @@
         <p><a href="/about">About</a> · <a href="/privacy">Privacy</a> · <a href="/cookies">Cookies</a> · <a href="/terms">Terms</a> · <a href="/copyright">Copyright</a> · <a href="/contact">Contact</a> · <a href="/faq">FAQ</a></p>
         <p>© 2026 Insta Video Downloader. All rights reserved.</p>
     </footer>
-    <script>window.PAGE_KEY = {{ page_key|tojson }};</script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
