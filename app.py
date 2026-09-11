@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 import os
+import re
 from html import unescape
 from html.parser import HTMLParser
 from urllib.request import Request, urlopen
@@ -12,11 +13,11 @@ from urllib.parse import urlparse
 
 import yt_dlp
 from flask import Flask, after_this_request, jsonify, render_template, request, send_file
-from flask_cors import CORS
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-CORS(app)
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
 
 MAX_URL_LENGTH = 2_048
 DOWNLOAD_DIR = Path(tempfile.gettempdir()) / "video-downloader"
@@ -36,12 +37,20 @@ def _validate_url(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
     url = value.strip()
-    parsed = urlparse(url)
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+    except ValueError:
+        return None
     if (
         not url
         or len(url) > MAX_URL_LENGTH
         or parsed.scheme not in {"http", "https"}
         or not parsed.netloc
+        or parsed.username
+        or parsed.password
+        or not hostname
+        or hostname.lower() not in ALLOWED_HOSTS
     ):
         return None
     return url
@@ -107,6 +116,53 @@ SITE_URL = os.environ.get(
     "SITE_URL",
     "https://insta-video-downloader-ear1.onrender.com",
 ).rstrip("/")
+ALLOWED_HOSTS = {"instagram.com", "www.instagram.com"}
+ALLOWED_MEDIA_HOST_SUFFIXES = (".cdninstagram.com", ".fbcdn.net", ".instagram.com")
+
+
+def _is_allowed_media_url(value: str) -> bool:
+    try:
+        parsed = urlparse(value)
+        hostname = parsed.hostname
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "https"
+        and bool(hostname)
+        and (
+            hostname.lower() in ALLOWED_HOSTS
+            or hostname.lower().endswith(ALLOWED_MEDIA_HOST_SUFFIXES)
+        )
+    )
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_request_too_large(_error):
+    return _json_error("Request payload is too large.", 413)
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "camera=(), microphone=(), geolocation=()",
+    )
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; img-src 'self' https: data:; "
+        "style-src 'self'; script-src 'self'; "
+        "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; "
+        "form-action 'self'",
+    )
+    if request.is_secure:
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains",
+        )
+    return response
 
 
 PAGE_CONFIG = {
@@ -387,6 +443,11 @@ def download_video():
         return _json_error("Please provide a valid video URL.")
     if not isinstance(format_id, str) or not format_id.strip() or len(format_id) > 200:
         return _json_error("Please select a valid format.")
+    if format_id.strip() != "image" and not re.fullmatch(
+        r"[A-Za-z0-9._,+-]+",
+        format_id.strip(),
+    ):
+        return _json_error("Please select a valid format.")
 
     if format_id.strip() == "image":
         try:
@@ -394,6 +455,8 @@ def download_video():
             if not image_info:
                 return _json_error("No downloadable image was found.", 422)
             image_url = image_info["formats"][0]["url"]
+            if not _is_allowed_media_url(image_url):
+                return _json_error("The media source is not trusted.", 422)
             file_descriptor, temporary_path = tempfile.mkstemp(
                 suffix=".jpg",
                 dir=DOWNLOAD_DIR,
@@ -480,7 +543,7 @@ def download_video():
 
 if __name__ == "__main__":
     app.run(
-        debug=True,
+        debug=os.environ.get("FLASK_DEBUG") == "1",
         host="127.0.0.1",
         port=5000,
     )
