@@ -100,13 +100,21 @@ document.addEventListener("DOMContentLoaded", () => {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ url: currentUrl, format_id: formatId })
             });
-            if (!response.ok) throw new Error((await response.json()).error || "Download failed.");
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.error || "Download failed.");
+            }
             const objectUrl = URL.createObjectURL(await response.blob());
             const link = document.createElement("a");
             link.href = objectUrl;
             link.download = "instagram-media";
+            link.style.display = "none";
+            document.body.append(link);
             link.click();
-            URL.revokeObjectURL(objectUrl);
+            setTimeout(() => {
+                URL.revokeObjectURL(objectUrl);
+                link.remove();
+            }, 1000);
         } catch (requestError) {
             showError(requestError.message);
         } finally {
