@@ -31,7 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
         const url = input.value.trim();
-        if (!url) return showError("Please paste an Instagram link.");
+        if (!url) return showError("Please paste a YouTube link.");
 
         currentUrl = url;
         clearError();
@@ -69,9 +69,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function renderResult(data) {
-        title.textContent = data.title || "Instagram media";
+        title.textContent = data.title || "YouTube media";
         thumbnail.src = data.thumbnail || "";
-        thumbnail.alt = data.title ? `Thumbnail for ${data.title}` : "Media thumbnail";
+        thumbnail.alt = data.title ? `Thumbnail for ${data.title}` : "Video thumbnail";
         thumbnail.hidden = !data.thumbnail;
         formats.replaceChildren();
         (data.formats || []).forEach((format) => {
@@ -108,7 +108,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const objectUrl = URL.createObjectURL(await response.blob());
             const link = document.createElement("a");
             link.href = objectUrl;
-            link.download = "instagram-media";
+            link.download = "clipfetch-video.mp4";
             link.style.display = "none";
             document.body.append(link);
             link.click();
