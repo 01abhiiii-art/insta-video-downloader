@@ -3,7 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="{{ heading }}">
+    <meta name="description" content="{{ heading }} | ClipFetch">
+    <link rel="canonical" href="{{ request.base_url }}">
     <title>{{ title }}</title>
     <link rel="icon" href="{{ url_for('static', filename='clipfetch-favicon.svg') }}" type="image/svg+xml">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
@@ -33,7 +34,7 @@
     </main>
     <footer>
         <p><a href="/about">About</a> · <a href="/privacy">Privacy</a> · <a href="/cookies">Cookies</a> · <a href="/terms">Terms</a> · <a href="/copyright">Copyright</a> · <a href="/contact">Contact</a></p>
-        <p>© 2026 Insta Video Downloader. All rights reserved.</p>
+        <p>© 2026 ClipFetch. YouTube is a trademark of Google LLC. ClipFetch is independent.</p>
     </footer>
 </body>
 </html>
