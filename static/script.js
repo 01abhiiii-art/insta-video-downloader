@@ -11,6 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const thumbnail = document.querySelector("#thumbnail");
     const formats = document.querySelector("#formats-container");
     const themeToggle = document.querySelector("#theme-toggle");
+    const pageKey = form.dataset.pageKey || "video";
     let currentUrl = "";
 
     pasteButton.addEventListener("click", async () => {
@@ -42,7 +43,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const response = await fetch("/api/info", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url })
+                body: JSON.stringify({ url, page_key: pageKey })
             });
             const data = await readJson(response);
             renderResult(data);
@@ -98,7 +99,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const response = await fetch("/api/download", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: currentUrl, format_id: formatId })
+                body: JSON.stringify({ url: currentUrl, format_id: formatId, page_key: pageKey })
             });
             if (!response.ok) {
                 const data = await response.json().catch(() => ({}));
