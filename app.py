@@ -422,9 +422,10 @@ def copyright_policy():
 def get_info():
     payload = _get_payload()
     url = _validate_url(payload.get("url") if payload else None)
+    page_key = payload.get("page_key") if payload else None
     if not url:
         return _json_error("Please provide a valid video URL.")
-    if payload and "page_key" in payload and not _validate_tool_url(url, payload["page_key"]):
+    if payload and "page_key" in payload and not _validate_tool_url(url, page_key):
         return _json_error("This link does not match the selected downloader.")
 
     options = {
@@ -437,6 +438,12 @@ def get_info():
         with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(url, download=False)
     except yt_dlp.utils.DownloadError as exc:
+        if page_key == "story":
+            return _json_error(
+                "This story is unavailable to the downloader. It may be expired, "
+                "private, login-required, or temporarily blocked by Instagram.",
+                422,
+            )
         try:
             fallback = _extract_image_fallback(url)
         except Exception:
@@ -467,7 +474,7 @@ def get_info():
     # Some Instagram photo/carousel URLs are accepted by yt-dlp but return no
     # formats. Try the OG image path in that case instead of showing a dead
     # "No downloadable formats" result.
-    if not formats:
+    if not formats and page_key != "story":
         try:
             fallback = _extract_image_fallback(url)
         except Exception:
@@ -494,10 +501,17 @@ def download_video():
     payload = _get_payload()
     url = _validate_url(payload.get("url") if payload else None)
     format_id = payload.get("format_id") if payload else None
+    page_key = payload.get("page_key") if payload else None
     if not url:
         return _json_error("Please provide a valid video URL.")
-    if payload and "page_key" in payload and not _validate_tool_url(url, payload["page_key"]):
+    if payload and "page_key" in payload and not _validate_tool_url(url, page_key):
         return _json_error("This link does not match the selected downloader.")
+    if page_key == "story" and format_id == "image":
+        return _json_error(
+            "This story does not expose a downloadable image. It may be expired, "
+            "private, login-required, or temporarily blocked by Instagram.",
+            422,
+        )
     if not isinstance(format_id, str) or not format_id.strip() or len(format_id) > 200:
         return _json_error("Please select a valid format.")
     if format_id.strip() != "image" and not re.fullmatch(
