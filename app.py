@@ -124,7 +124,7 @@ def _extract_image_fallback(url: str) -> dict[str, Any] | None:
             {
                 "format_id": "image",
                 "ext": "jpg",
-                "quality": "Original image",
+                "quality": "Available public image",
                 "url": image_url,
             }
         ],
