@@ -1,291 +1,117 @@
-from __future__ import annotations
-
-import os
-import re
-import shutil
-import time
-from collections import defaultdict, deque
-from pathlib import Path
-from typing import Any
-from urllib.parse import parse_qs, urlparse
-
+from flask import Flask, request, jsonify, render_template, send_file
+from flask_cors import CORS
 import yt_dlp
-from flask import Flask, jsonify, render_template, request, send_file
-from werkzeug.exceptions import RequestEntityTooLarge
-from werkzeug.utils import secure_filename
+import os
+import uuid
+import imageio_ffmpeg
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
+CORS(app)
 
-MAX_URL_LENGTH = 2048
-DOWNLOAD_DIR = Path(__file__).resolve().parent / "downloads"
-DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-SITE_URL = os.environ.get("SITE_URL", "https://clipfetch.in").rstrip("/")
-BUSINESS_NAME = "ClipFetch"
-LEGAL_EMAIL = "01.abhiiii@gmail.com"
-JURISDICTION = "India"
-ALLOWED_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"}
-REQUESTS: dict[str, deque[float]] = defaultdict(deque)
-RATE_WINDOW = 60
-RATE_LIMIT = 12
-VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
+DOWNLOAD_FOLDER = 'downloads'
+os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
-PAGE_CONFIG = {
-    "video": {"path": "/", "label": "YouTube Video Downloader", "description": "Save public YouTube videos in crisp MP4 quality.", "placeholder": "Paste a YouTube video link", "icon": "▶"},
-    "shorts": {"path": "/shorts", "label": "YouTube Shorts Downloader", "description": "Download public YouTube Shorts for offline viewing.", "placeholder": "Paste a YouTube Shorts link", "icon": "✦"},
-}
+# FFmpeg ka path automatic set karein
+FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
 
-
-def _json_error(message: str, status: int = 400):
-    return jsonify({"error": message}), status
-
-
-def _payload() -> dict[str, Any]:
-    value = request.get_json(silent=True)
-    return value if isinstance(value, dict) else {}
-
-
-def _video_id(url: str) -> str | None:
-    parsed = urlparse(url)
-    host = (parsed.hostname or "").lower().rstrip(".")
-    if host == "youtu.be":
-        candidate = parsed.path.strip("/").split("/")[0]
-    else:
-        candidate = parse_qs(parsed.query).get("v", [""])[0]
-        if not candidate and parsed.path.lower().startswith("/shorts/"):
-            candidate = parsed.path.split("/")[2] if len(parsed.path.split("/")) > 2 else ""
-    return candidate if VIDEO_ID.fullmatch(candidate) else None
-
-
-def _validate_url(value: Any) -> str | None:
-    if not isinstance(value, str):
-        return None
-    url = value.strip()
-    try:
-        parsed = urlparse(url)
-        host = (parsed.hostname or "").lower().rstrip(".")
-    except ValueError:
-        return None
-    if (not url or len(url) > MAX_URL_LENGTH or parsed.scheme not in {"http", "https"}
-            or parsed.username or parsed.password or host not in ALLOWED_HOSTS
-            or not _video_id(url)):
-        return None
-    return url
-
-
-def _validate_page(url: str, page_key: Any) -> bool:
-    if not isinstance(page_key, str) or page_key not in PAGE_CONFIG:
-        return False
-    path = urlparse(url).path.lower()
-    return (page_key == "shorts" and "/shorts/" in path) or (page_key == "video" and "/shorts/" not in path)
-
-
-def _rate_limited() -> bool:
-    key = request.remote_addr or "unknown"
-    now = time.monotonic()
-    entries = REQUESTS[key]
-    while entries and now - entries[0] > RATE_WINDOW:
-        entries.popleft()
-    if len(entries) >= RATE_LIMIT:
-        return True
-    entries.append(now)
-    return False
-
-
-def _format_quality(item: dict[str, Any]) -> str:
-    height = item.get("height")
-    return f"{height}p" if isinstance(height, int) and height > 0 else str(item.get("format_note") or "Available")
-
-
-def _format_size(item: dict[str, Any]) -> str:
-    value = item.get("filesize") or item.get("filesize_approx")
-    if not isinstance(value, (int, float)) or value <= 0:
-        return ""
-    units = ("B", "KB", "MB", "GB")
-    size = float(value)
-    for unit in units:
-        if size < 1024 or unit == units[-1]:
-            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} B"
-        size /= 1024
-
-
-@app.errorhandler(RequestEntityTooLarge)
-def too_large(_error):
-    return _json_error("Request payload is too large.", 413)
-
-
-@app.after_request
-def security_headers(response):
-    response.headers.setdefault("X-Content-Type-Options", "nosniff")
-    response.headers.setdefault("X-Frame-Options", "DENY")
-    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-    response.headers.setdefault("Content-Security-Policy", "default-src 'self'; img-src 'self' https: data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
-    return response
-
-
-@app.route("/")
+@app.route('/')
 def home():
-    return render_template("index.html", page=PAGE_CONFIG["video"], page_key="video", page_config=PAGE_CONFIG)
+    return render_template('index.html')
 
-
-@app.get("/<page_key>")
-def downloader_page(page_key: str):
-    page = PAGE_CONFIG.get(page_key)
-    if not page:
-        return render_template("info.html", title="Page not found", heading="Page not found", content="This page does not exist."), 404
-    return render_template("index.html", page=page, page_key=page_key, page_config=PAGE_CONFIG)
-
-
-@app.get("/sitemap.xml")
-def sitemap():
-    routes = ["/", "/shorts", "/faq", "/about", "/privacy", "/cookies", "/terms", "/copyright", "/contact"]
-    xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + "".join(f"  <url><loc>{SITE_URL}{route}</loc></url>\n" for route in routes) + "</urlset>\n"
-    return app.response_class(xml, mimetype="application/xml")
-
-
-@app.get("/robots.txt")
-def robots():
-    return app.response_class(f"User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: {SITE_URL}/sitemap.xml\n", mimetype="text/plain")
-
-
-INFO = {
-    "faq": ("Frequently asked questions", [("Is ClipFetch free?", "Yes. ClipFetch is a simple utility for public YouTube videos and Shorts."), ("What links work?", "Only public, individual YouTube and YouTube Shorts links are accepted. Private, members-only, age-restricted, or login-protected content is not accessed."), ("Are my links stored?", "No. Links are processed for the request and temporary files are removed after delivery."), ("Why did a download fail?", "The video may be unavailable, restricted, rate-limited, or unsupported by YouTube or the selected format.")]),
-    "about": ("About ClipFetch", f"{BUSINESS_NAME} helps you save public YouTube videos and Shorts that you own or have permission to use. It does not host a media library, bypass access controls, or use cookies/private sessions."),
-    "privacy": ("Privacy policy", f"We process submitted URLs only to provide the requested result. Temporary files are removed after delivery. Basic technical request data may be processed by hosting and abuse-prevention systems. Contact {LEGAL_EMAIL} for privacy questions."),
-    "cookies": ("Cookie policy", f"{BUSINESS_NAME} does not require account cookies or tracking cookies. Your browser may retain local preferences such as the theme. Hosting and security providers may process standard request logs."),
-    "terms": ("Terms and conditions", f"Use {BUSINESS_NAME} only for public content you own or are legally allowed to save. Do not infringe copyright, bypass access controls, submit private links, automate abusive traffic, or interfere with the service. You are responsible for the URLs and files you use."),
-    "copyright": ("Copyright policy", f"{BUSINESS_NAME} does not host downloaded media. For rights-holder concerns or takedown requests, contact {LEGAL_EMAIL} with the relevant URL and proof of rights."),
-    "contact": (f"Contact {BUSINESS_NAME}", f"For support, privacy, copyright, or legal requests, email {LEGAL_EMAIL}. Do not send passwords or sensitive personal information."),
-}
-
-
-for _name in INFO:
-    def _make_route(name):
-        def route():
-            heading, content = INFO[name]
-            return render_template("info.html", title=f"{heading} | ClipFetch", heading=heading, content=content, faqs=content if name == "faq" else None)
-        route.__name__ = f"info_{name}"
-        return route
-    app.add_url_rule(f"/{_name}", endpoint=f"info_{_name}", view_func=_make_route(_name))
-
-
-@app.post("/api/info")
+@app.route('/api/info', methods=['POST'])
 def get_info():
-    if _rate_limited():
-        return _json_error("Too many requests. Please wait a minute and try again.", 429)
-    data = _payload()
-    url = _validate_url(data.get("url"))
-    page_key = data.get("page_key", "video")
+    data = request.json
+    url = data.get('url')
     if not url:
-        return _json_error("Please provide a valid public YouTube URL.")
-    if not _validate_page(url, page_key):
-        return _json_error("Choose the matching Video or Shorts tool for this link.")
+        return jsonify({'error': 'URL daalein'}), 400
+    
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': False,
+        'skip_download': True,
+        'nocheckcertificate': True,
+        'retries': 5,
+        'fragment_retries': 5
+    }
+    
     try:
-        with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True, "noplaylist": True}) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-    except yt_dlp.utils.DownloadError:
-        return _json_error("We couldn't read that YouTube video. It may be private, restricted, unavailable, or rate-limited.", 422)
-    except Exception:
-        app.logger.exception("metadata extraction failed")
-        return _json_error("Something went wrong while reading the video. Please try again.", 500)
-    formats = []
-    for item in info.get("formats", []):
-        fid, vcodec, ext = item.get("format_id"), item.get("vcodec"), item.get("ext")
-        height = item.get("height")
-        acodec = item.get("acodec")
-        if not fid or ext not in {"mp4", "webm", "mkv", "m4a", "opus"}:
-            continue
-        if vcodec not in {None, "none"}:
-            if not isinstance(height, int) or height < 144 or height > 2160:
-                continue
-            formats.append({
-                "format_id": str(fid),
-                "ext": str(ext),
-                "quality": _format_quality(item),
-                "size": _format_size(item),
-                "kind": "video",
-                "has_audio": acodec not in {None, "none"},
-            })
-        elif acodec not in {None, "none"}:
-            abr = item.get("abr")
-            quality = f"{round(abr)}kbps" if isinstance(abr, (int, float)) and abr > 0 else "Audio"
-            formats.append({
-                "format_id": str(fid),
-                "ext": str(ext),
-                "quality": quality,
-                "size": _format_size(item),
-                "kind": "audio",
-                "has_audio": True,
-            })
-    unique = {}
-    for item in formats:
-        key = (item["kind"], item["quality"])
-        unique[key] = item
-    if not unique:
-        return _json_error("No safe downloadable formats were found for this video.", 422)
-    return jsonify({"title": info.get("title") or "YouTube video", "thumbnail": info.get("thumbnail") or "", "formats": list(unique.values())})
+            
+            formats = []
+            for f in info.get('formats', []):
+                if f.get('url') and f.get('ext') in ['mp4', 'm4a', 'webm']:
+                    formats.append({
+                        'format_id': f['format_id'],
+                        'ext': f['ext'],
+                        'quality': f.get('format_note', f.get('resolution', 'Unknown')),
+                        'filesize': f.get('filesize', 0),
+                        'url': f['url']
+                    })
+            
+            if not formats:
+                formats.append({'format_id': 'best', 'ext': 'mp4', 'quality': 'Best Available', 'filesize': 0, 'url': ''})
 
-
-@app.post("/api/download")
-def download_video():
-    if _rate_limited():
-        return _json_error("Too many requests. Please wait a minute and try again.", 429)
-    data = _payload()
-    url, format_id = _validate_url(data.get("url")), data.get("format_id")
-    kind = data.get("kind", "video")
-    if not url or not isinstance(format_id, str) or not re.fullmatch(r"[\w.-]{1,30}", format_id):
-        return _json_error("Invalid video or format selection.")
-    if kind not in {"video", "audio"}:
-        return _json_error("Invalid media type.")
-    temp_dir = DOWNLOAD_DIR / f"job-{os.urandom(8).hex()}"
-    temp_dir.mkdir()
-    try:
-        options = {
-            "quiet": True,
-            "no_warnings": True,
-            "noplaylist": True,
-            "format": (
-                f"{format_id}+bestaudio/{format_id}/best"
-                if kind == "video"
-                else format_id
-            ),
-            "outtmpl": str(temp_dir / "clip.%(ext)s"),
-            "restrictfilenames": True,
-        }
-        if kind == "video":
-            options["merge_output_format"] = "mp4"
+            return jsonify({
+                'title': info.get('title', 'Unknown Title'),
+                'thumbnail': info.get('thumbnail', ''),
+                'duration': info.get('duration', 0),
+                'formats': formats
+            })
+    except Exception as e:
+        error_msg = str(e)
+        if "Sign in" in error_msg or "bot" in error_msg:
+            return jsonify({'error': 'YouTube ne is video ke liye verification maangi hai. Kripya thodi der baad try karein.'}), 500
+        elif "private" in error_msg.lower() or "unavailable" in error_msg.lower():
+            return jsonify({'error': 'Yeh video private ya unavailable hai.'}), 500
         else:
-            options.update({
-                "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": "192",
-                }],
-            })
-        with yt_dlp.YoutubeDL(options) as ydl:
+            return jsonify({'error': f'Video details fetch nahi ho payi: {error_msg}'}), 500
+
+@app.route('/api/download', methods=['POST'])
+def download_video():
+    data = request.json
+    url = data.get('url')
+    format_id = data.get('format_id', 'best')
+    
+    unique_id = str(uuid.uuid4())
+    output_path = os.path.join(DOWNLOAD_FOLDER, f"{unique_id}.%(ext)s")
+    
+    ydl_opts = {
+        'format': f'{format_id}+bestaudio/best' if format_id != 'best' else 'bestvideo+bestaudio/best',
+        'outtmpl': output_path,
+        'merge_output_format': 'mp4',
+        'quiet': True,
+        'no_warnings': True,
+        'ffmpeg_location': FFMPEG_PATH,
+        'retries': 10,
+        'fragment_retries': 10,
+        'nocheckcertificate': True,
+        'ignoreerrors': False,
+        'no_color': True
+    }
+    
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            prepared = Path(ydl.prepare_filename(info))
-        files = [p for p in temp_dir.iterdir() if p.is_file() and p.stat().st_size]
-        result = max(files, key=lambda p: p.stat().st_size, default=prepared)
-        if not result.is_file():
-            raise FileNotFoundError
-    except yt_dlp.utils.DownloadError as exc:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        if "ffmpeg" in str(exc).lower() or "ffprobe" in str(exc).lower():
-            return _json_error("This download requires FFmpeg, which is not available on the server yet.", 503)
-        return _json_error("The download could not be completed. Check that the video is public and try again.", 422)
-    except Exception:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        app.logger.exception("download failed")
-        return _json_error("Something went wrong while preparing the download.", 500)
-    name = secure_filename(info.get("title") or "clip") or "clip"
-    extension = "mp3" if kind == "audio" else "mp4"
-    mimetype = "audio/mpeg" if kind == "audio" else "video/mp4"
-    response = send_file(result, as_attachment=True, download_name=f"{name}.{extension}", mimetype=mimetype, max_age=0)
-    response.call_on_close(lambda: shutil.rmtree(temp_dir, ignore_errors=True))
-    return response
+            filename = ydl.prepare_filename(info)
+            
+            if not os.path.exists(filename):
+                filename = filename.rsplit('.', 1)[0] + '.mp4'
+            
+            if not os.path.exists(filename):
+                return jsonify({'error': 'File download nahi ho payi. Kripya dobara try karein.'}), 500
 
+        return send_file(filename, as_attachment=True, download_name=f"{info.get('title', 'video')}.mp4")
+        
+    except Exception as e:
+        error_msg = str(e)
+        if "Requested format is not available" in error_msg:
+            return jsonify({'error': 'Yeh format available nahi hai. Kripya koi aur quality chunein.'}), 500
+        elif "Sign in" in error_msg or "bot" in error_msg:
+            return jsonify({'error': 'YouTube ne verification maangi. Kripya thodi der baad try karein.'}), 500
+        else:
+            return jsonify({'error': f'Download fail: {error_msg}'}), 500
 
-if __name__ == "__main__":
-    app.run(debug=os.environ.get("FLASK_DEBUG") == "1", host="127.0.0.1", port=5000)
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)
