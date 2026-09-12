@@ -224,34 +224,6 @@ PAGE_CONFIG = {
         "placeholder": "Insert an Instagram Reel link",
         "icon": "◌",
     },
-    "story": {
-        "path": "/story",
-        "label": "Story Downloader",
-        "description": "Save public Instagram Stories with one click.",
-        "placeholder": "Insert an Instagram Story link",
-        "icon": "◉",
-    },
-    "viewer": {
-        "path": "/viewer",
-        "label": "Profile Viewer",
-        "description": "Explore public Instagram profile media.",
-        "placeholder": "Insert a public profile link",
-        "icon": "◍",
-    },
-    "igtv": {
-        "path": "/igtv",
-        "label": "IGTV Downloader",
-        "description": "Download long-form Instagram videos.",
-        "placeholder": "Insert an IGTV link",
-        "icon": "▣",
-    },
-    "carousel": {
-        "path": "/carousel",
-        "label": "Carousel Downloader",
-        "description": "Save photos and videos from carousel posts.",
-        "placeholder": "Insert a carousel post link",
-        "icon": "▤",
-    },
 }
 
 
@@ -274,10 +246,6 @@ def sitemap():
         "/",
         "/photo",
         "/reels",
-        "/story",
-        "/viewer",
-        "/igtv",
-        "/carousel",
         "/faq",
         "/about",
         "/privacy",
