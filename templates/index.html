@@ -25,7 +25,7 @@
                 <p class="platform">{{ page.icon }} Public media tool</p>
                 <h1>{{ page.label }}</h1>
                 <p class="hero-copy">{{ page.description }}</p>
-                <form id="input-section" class="url-form" novalidate>
+                <form id="input-section" class="url-form" data-page-key="{{ page_key }}" novalidate>
                     <label class="sr-only" for="video-url">Media URL</label>
                     <input id="video-url" type="url" placeholder="{{ page.placeholder }}" autocomplete="url" required>
                     <button id="paste-btn" class="paste-btn" type="button">▣&nbsp; Paste</button>
