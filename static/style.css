@@ -47,6 +47,8 @@ h1 { margin: 18px 0 12px; font-size: clamp(39px, 6vw, 60px); line-height: 1.05; 
 .thumbnail { display: block; width: min(100%, 500px); max-height: 280px; margin: 20px auto; object-fit: cover; border-radius: 12px; }
 .result h2 { overflow-wrap: anywhere; }
 .format-heading { color: var(--muted); text-align: left; }
+.format-group { margin-top: 22px; text-align: left; }
+.format-group h3 { margin: 0 0 10px; color: var(--ink); font-size: 15px; }
 .formats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
 .format-btn { padding: 13px; color: white; background: linear-gradient(130deg, #ff3158, #ff6b39); border: 0; border-radius: 12px; cursor: pointer; font-weight: 700; box-shadow: 0 8px 16px rgba(255,49,88,.2); }
 .format-btn small { display: block; margin-top: 3px; opacity: .8; }
