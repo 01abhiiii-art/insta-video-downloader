@@ -97,6 +97,18 @@ def _format_quality(item: dict[str, Any]) -> str:
     return f"{height}p" if isinstance(height, int) and height > 0 else str(item.get("format_note") or "Available")
 
 
+def _format_size(item: dict[str, Any]) -> str:
+    value = item.get("filesize") or item.get("filesize_approx")
+    if not isinstance(value, (int, float)) or value <= 0:
+        return ""
+    units = ("B", "KB", "MB", "GB")
+    size = float(value)
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} B"
+        size /= 1024
+
+
 @app.errorhandler(RequestEntityTooLarge)
 def too_large(_error):
     return _json_error("Request payload is too large.", 413)
@@ -139,12 +151,12 @@ def robots():
 
 INFO = {
     "faq": ("Frequently asked questions", [("Is ClipFetch free?", "Yes. ClipFetch is a simple utility for public YouTube videos and Shorts."), ("What links work?", "Only public, individual YouTube and YouTube Shorts links are accepted. Private, members-only, age-restricted, or login-protected content is not accessed."), ("Are my links stored?", "No. Links are processed for the request and temporary files are removed after delivery."), ("Why did a download fail?", "The video may be unavailable, restricted, rate-limited, or unsupported by YouTube or the selected format.")]),
-    "about": ("About ClipFetch", f"ClipFetch helps you save public YouTube videos and Shorts that you own or have permission to use. It does not host a media library, bypass access controls, or use cookies/private sessions."),
+    "about": ("About ClipFetch", f"{BUSINESS_NAME} helps you save public YouTube videos and Shorts that you own or have permission to use. It does not host a media library, bypass access controls, or use cookies/private sessions."),
     "privacy": ("Privacy policy", f"We process submitted URLs only to provide the requested result. Temporary files are removed after delivery. Basic technical request data may be processed by hosting and abuse-prevention systems. Contact {LEGAL_EMAIL} for privacy questions."),
-    "cookies": ("Cookie policy", "ClipFetch does not require account cookies or tracking cookies. Your browser may retain local preferences such as the theme. Hosting and security providers may process standard request logs."),
-    "terms": ("Terms and conditions", "Use ClipFetch only for public content you own or are legally allowed to save. Do not infringe copyright, bypass access controls, submit private links, automate abusive traffic, or interfere with the service. You are responsible for the URLs and files you use."),
-    "copyright": ("Copyright policy", f"ClipFetch does not host downloaded media. For rights-holder concerns or takedown requests, contact {LEGAL_EMAIL} with the relevant URL and proof of rights."),
-    "contact": ("Contact ClipFetch", f"For support, privacy, copyright, or legal requests, email {LEGAL_EMAIL}. Do not send passwords or sensitive personal information."),
+    "cookies": ("Cookie policy", f"{BUSINESS_NAME} does not require account cookies or tracking cookies. Your browser may retain local preferences such as the theme. Hosting and security providers may process standard request logs."),
+    "terms": ("Terms and conditions", f"Use {BUSINESS_NAME} only for public content you own or are legally allowed to save. Do not infringe copyright, bypass access controls, submit private links, automate abusive traffic, or interfere with the service. You are responsible for the URLs and files you use."),
+    "copyright": ("Copyright policy", f"{BUSINESS_NAME} does not host downloaded media. For rights-holder concerns or takedown requests, contact {LEGAL_EMAIL} with the relevant URL and proof of rights."),
+    "contact": (f"Contact {BUSINESS_NAME}", f"For support, privacy, copyright, or legal requests, email {LEGAL_EMAIL}. Do not send passwords or sensitive personal information."),
 }
 
 
@@ -181,10 +193,35 @@ def get_info():
     for item in info.get("formats", []):
         fid, vcodec, ext = item.get("format_id"), item.get("vcodec"), item.get("ext")
         height = item.get("height")
-        if not fid or vcodec in {None, "none"} or ext not in {"mp4", "webm", "mkv"} or not isinstance(height, int) or height < 144 or height > 2160:
+        acodec = item.get("acodec")
+        if not fid or ext not in {"mp4", "webm", "mkv", "m4a", "opus"}:
             continue
-        formats.append({"format_id": str(fid), "ext": str(ext), "quality": _format_quality(item), "has_audio": item.get("acodec") not in {None, "none"}})
-    unique = {item["quality"]: item for item in formats}
+        if vcodec not in {None, "none"}:
+            if not isinstance(height, int) or height < 144 or height > 2160:
+                continue
+            formats.append({
+                "format_id": str(fid),
+                "ext": str(ext),
+                "quality": _format_quality(item),
+                "size": _format_size(item),
+                "kind": "video",
+                "has_audio": acodec not in {None, "none"},
+            })
+        elif acodec not in {None, "none"}:
+            abr = item.get("abr")
+            quality = f"{round(abr)}kbps" if isinstance(abr, (int, float)) and abr > 0 else "Audio"
+            formats.append({
+                "format_id": str(fid),
+                "ext": str(ext),
+                "quality": quality,
+                "size": _format_size(item),
+                "kind": "audio",
+                "has_audio": True,
+            })
+    unique = {}
+    for item in formats:
+        key = (item["kind"], item["quality"])
+        unique[key] = item
     if not unique:
         return _json_error("No safe downloadable formats were found for this video.", 422)
     return jsonify({"title": info.get("title") or "YouTube video", "thumbnail": info.get("thumbnail") or "", "formats": list(unique.values())})
@@ -196,27 +233,56 @@ def download_video():
         return _json_error("Too many requests. Please wait a minute and try again.", 429)
     data = _payload()
     url, format_id = _validate_url(data.get("url")), data.get("format_id")
+    kind = data.get("kind", "video")
     if not url or not isinstance(format_id, str) or not re.fullmatch(r"[\w.-]{1,30}", format_id):
         return _json_error("Invalid video or format selection.")
+    if kind not in {"video", "audio"}:
+        return _json_error("Invalid media type.")
     temp_dir = DOWNLOAD_DIR / f"job-{os.urandom(8).hex()}"
     temp_dir.mkdir()
     try:
-        with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "noplaylist": True, "format": f"{format_id}+bestaudio/{format_id}", "outtmpl": str(temp_dir / "clip.%(ext)s"), "merge_output_format": "mp4", "restrictfilenames": True}) as ydl:
+        options = {
+            "quiet": True,
+            "no_warnings": True,
+            "noplaylist": True,
+            "format": (
+                f"{format_id}+bestaudio/{format_id}/best"
+                if kind == "video"
+                else format_id
+            ),
+            "outtmpl": str(temp_dir / "clip.%(ext)s"),
+            "restrictfilenames": True,
+        }
+        if kind == "video":
+            options["merge_output_format"] = "mp4"
+        else:
+            options.update({
+                "postprocessors": [{
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }],
+            })
+        with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(url, download=True)
             prepared = Path(ydl.prepare_filename(info))
         files = [p for p in temp_dir.iterdir() if p.is_file() and p.stat().st_size]
         result = max(files, key=lambda p: p.stat().st_size, default=prepared)
         if not result.is_file():
             raise FileNotFoundError
-    except yt_dlp.utils.DownloadError:
+    except yt_dlp.utils.DownloadError as exc:
         shutil.rmtree(temp_dir, ignore_errors=True)
+        if "ffmpeg" in str(exc).lower() or "ffprobe" in str(exc).lower():
+            return _json_error("This download requires FFmpeg, which is not available on the server yet.", 503)
         return _json_error("The download could not be completed. Check that the video is public and try again.", 422)
     except Exception:
         shutil.rmtree(temp_dir, ignore_errors=True)
         app.logger.exception("download failed")
         return _json_error("Something went wrong while preparing the download.", 500)
     name = secure_filename(info.get("title") or "clip") or "clip"
-    response = send_file(result, as_attachment=True, download_name=f"{name}.mp4", mimetype="video/mp4", max_age=0)
+    extension = "mp3" if kind == "audio" else "mp4"
+    mimetype = "audio/mpeg" if kind == "audio" else "video/mp4"
+    response = send_file(result, as_attachment=True, download_name=f"{name}.{extension}", mimetype=mimetype, max_age=0)
     response.call_on_close(lambda: shutil.rmtree(temp_dir, ignore_errors=True))
     return response
 
