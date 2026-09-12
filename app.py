@@ -56,6 +56,28 @@ def _validate_url(value: Any) -> str | None:
     return url
 
 
+def _validate_tool_url(url: str, page_key: Any) -> str | None:
+    if page_key is None:
+        return url
+    if not isinstance(page_key, str) or page_key not in PAGE_CONFIG:
+        return None
+
+    path = urlparse(url).path.rstrip("/").lower()
+    if page_key == "viewer":
+        reserved = ("/p/", "/reel/", "/reels/", "/stories/", "/tv/")
+        return url if not any(item in f"{path}/" for item in reserved) else None
+
+    required_paths = {
+        "reels": ("/reel/", "/reels/"),
+        "story": ("/stories/",),
+        "igtv": ("/tv/",),
+        "photo": ("/p/",),
+        "carousel": ("/p/",),
+        "video": ("/p/", "/reel/", "/reels/", "/tv/"),
+    }
+    return url if any(item in f"{path}/" for item in required_paths[page_key]) else None
+
+
 def _format_quality(video_format: dict[str, Any]) -> str:
     height = video_format.get("height")
     if isinstance(height, int) and height > 0:
@@ -387,6 +409,8 @@ def get_info():
     url = _validate_url(payload.get("url") if payload else None)
     if not url:
         return _json_error("Please provide a valid video URL.")
+    if payload and "page_key" in payload and not _validate_tool_url(url, payload["page_key"]):
+        return _json_error("This link does not match the selected downloader.")
 
     options = {
         "quiet": True,
@@ -457,6 +481,8 @@ def download_video():
     format_id = payload.get("format_id") if payload else None
     if not url:
         return _json_error("Please provide a valid video URL.")
+    if payload and "page_key" in payload and not _validate_tool_url(url, payload["page_key"]):
+        return _json_error("This link does not match the selected downloader.")
     if not isinstance(format_id, str) or not format_id.strip() or len(format_id) > 200:
         return _json_error("Please select a valid format.")
     if format_id.strip() != "image" and not re.fullmatch(
