@@ -4,6 +4,7 @@ import shutil
 import tempfile
 import os
 import re
+import json
 from html import unescape
 from html.parser import HTMLParser
 from urllib.request import Request, urlopen
@@ -85,6 +86,19 @@ def _format_quality(video_format: dict[str, Any]) -> str:
     return str(video_format.get("format_note") or video_format.get("resolution") or "Available")
 
 
+def _extract_original_image_url(html: str) -> str | None:
+    """Find Instagram's original public display URL before its social thumbnail."""
+    matches = re.findall(r'"display_url"\s*:\s*"([^"]+)"', html)
+    for value in matches:
+        try:
+            candidate = json.loads(f'"{value}"')
+        except json.JSONDecodeError:
+            candidate = value.replace(r"\/", "/").replace(r"\u0026", "&")
+        if _is_allowed_media_url(candidate):
+            return candidate
+    return None
+
+
 def _extract_image_fallback(url: str) -> dict[str, Any] | None:
     """Read public Instagram Open Graph metadata for image-only posts."""
     request = Request(
@@ -112,7 +126,8 @@ def _extract_image_fallback(url: str) -> dict[str, Any] | None:
     parser = MetadataParser()
     parser.feed(html)
 
-    image_url = parser.metadata.get("og:image") or parser.metadata.get("twitter:image")
+    image_url = _extract_original_image_url(html)
+    image_url = image_url or parser.metadata.get("og:image") or parser.metadata.get("twitter:image")
     if not image_url:
         return None
 
